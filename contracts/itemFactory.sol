@@ -4,6 +4,10 @@ pragma solidity ^0.8.0;
 import "./common/ERC1155SupplyCC.sol";
 import "@openzeppelin/contracts/access/AccessControl.sol";
 
+interface IMilk {
+    function gameMint(address, uint256) external;
+}
+
 contract ItemFactory is ERC1155SupplyCC, AccessControl {
 
     /// @dev Track last time a claim was made for a specific pet
@@ -22,16 +26,40 @@ contract ItemFactory is ERC1155SupplyCC, AccessControl {
         COMMON, UNCOMMON, RARE, EPIC, LEGENDARY
     }
 
+    enum EType {
+        MILK,
+        ITEMS,
+        BOX
+    }
+
     /// @dev rewardType => (rewardRarity => data)
     mapping(uint256 => mapping(uint256 => bytes)) _rewardMapping;
 
-    constructor(string memory uri, address milkContractAddress) {
+    event LogDailyClaim(
+        address claimer,
+        uint256 rewardType,
+        uint256 rewardRarity,
+        bytes rewardData
+    );
+
+    constructor(string memory uri) ERC1155(uri) {
         _setupRole(DEFAULT_ADMIN_ROLE, _msgSender());
+    }
+
+    function setMilkContractAddress(address milkContractAddress)
+        external
+        onlyRole(DEFAULT_ADMIN_ROLE)
+    {
         _milkContractAddress = milkContractAddress;
     }
 
     function claim(address claimer, uint256 entropy) external {
-
+require(
+            _lastUpdate[claimer] <= block.timestamp - 1 days,
+            "Claim once per day"
+        );
+        // Claims are specific to the that pet, not the claimer or a combination of claimer and pet
+        _lastUpdate[claimer] = block.timestamp;
         // generate a single random number and bit shift as needed
         uint256 randomNum = randomNum(entropy);
 
@@ -73,7 +101,7 @@ contract ItemFactory is ERC1155SupplyCC, AccessControl {
             );
 
             // do some bit shifting magic to create random min max
-            uint256 rewardAmount = lootData.min + (randomNum(entropy)) % (lootData.max - lootData.min + 1);
+            uint256 rewardAmount = min + (randomNum(entropy)) % (lootData.max - lootData.min + 1);
 
             // Give a MILK reward
             if (rewardType == uint256(EType.MILK)) {
@@ -92,8 +120,7 @@ contract ItemFactory is ERC1155SupplyCC, AccessControl {
 
         emit LogDailyClaim(claimer, rewardType, rewardRarity, rewardData);
 
-        // Claims are specific to the that pet, not the claimer or a combination of claimer and pet
-        _lastUpdate[petTokenId] = block.timestamp;
+       
     }
 
     function randomNum(uint entropy) internal returns (uint256) {
@@ -132,10 +159,22 @@ contract ItemFactory is ERC1155SupplyCC, AccessControl {
         _maxRarityRoll = maxRoll;
     }
 
-    function setReward(uint256 rewardType, uint256 rewardRarity, bytes calldata rewardData) external onlyRole(ADMIN_ROLE) {
-        (uint256 min, uint256 max, uint256[] memory ids) = abi.decode(
-            rewardData, (uint256, uint256, uint256[])
-        );
+    function setReward(
+        uint256 rewardType,
+        uint256 rewardRarity,
+        bytes calldata rewardData
+    ) external onlyRole(DEFAULT_ADMIN_ROLE) {
+        abi.decode(rewardData, (uint256, uint256, uint256[]));
         _rewardMapping[rewardType][rewardRarity] = rewardData;
+    }
+
+    function supportsInterface(bytes4 interfaceId)
+        public
+        view
+        virtual
+        override(ERC1155, AccessControl)
+        returns (bool)
+    {
+        return super.supportsInterface(interfaceId);
     }
 }

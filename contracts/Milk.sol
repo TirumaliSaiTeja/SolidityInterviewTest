@@ -7,6 +7,8 @@ import "@openzeppelin/contracts/access/AccessControl.sol";
 contract Milk is ERC20, AccessControl {
 
     bytes32 public constant DEPOSITOR_ROLE = keccak256("DEPOSITOR_ROLE");
+    bytes32 public constant CONTRACT_ROLE = keccak256("CONTRACT_ROLE");
+    bytes32 public constant MASTER_ROLE = keccak256("MASTER_ROLE");
 
     constructor(
         string memory name,
@@ -14,6 +16,7 @@ contract Milk is ERC20, AccessControl {
         address systemCheckerContractAddress
     ) ERC20(name, symbol){
         _setupRole(DEFAULT_ADMIN_ROLE, _msgSender());
+        _setupRole(CONTRACT_ROLE, systemCheckerContractAddress);
     }
 
     /// @notice called when token is deposited on root chain
